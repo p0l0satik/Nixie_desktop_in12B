@@ -1,7 +1,10 @@
 #include<avr/io.h>
 #include <util/delay.h>
+#include <avr/interrupt.h>
+#include <util/atomic.h>
 
-#define delay 2.5
+
+
 void TWIInit(void)
 {
     //set SCL to 400kHz
@@ -48,7 +51,49 @@ uint8_t TWIGetStatus(void)
     return status;
 }
 
-uint8_t digits[6] = {2, 2, 4, 1, 0, 0};
+
+static volatile uint64_t time = 0;
+
+ISR(TIMER0_COMPA_vect){
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+        time += 1;
+    }
+}
+
+//digit state machine init
+uint8_t digits[6] = {1, 8, 1, 0, 0, 0};
+enum digits{
+    FIRST  = 0b00000001,
+    SIXS   = 0b00100000
+};
+uint8_t digits_convert[] = {0b00001100, 0b00000100, 0b00000010, 0b00001000, 0b00000001, 
+                            0b00001011, 0b00001010, 0b00000011, 0b00001001, 0b00000000};
+uint8_t curr_digit;
+uint64_t next_change;
+#define shine_time 3
+void digite_state_m_init(){
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+        next_change = time + shine_time;
+    }
+    PORTD = FIRST;
+    curr_digit = 0;
+}
+
+void change_digit(){
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+        if (next_change > time) return;
+    }
+    curr_digit = (curr_digit + 1) % 6;
+    PORTC = digits_convert[digits[curr_digit]];
+    if (PORTD == SIXS) 
+        PORTD = FIRST;
+    else
+        PORTD <<= 1;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+        next_change = time + shine_time;
+    } 
+}
+
 void upd_time(){
     TWIStart();
     TWISend(0b10100000);
@@ -76,53 +121,36 @@ void set_time(){
     TWIStop();
 }
 
-enum digits{
-    FIRST  = 0b00000001,
-    SECOND = 0b00000010,
-    THIRD  = 0b00000100,
-    FORTH  = 0b00001000,
-    FIFTH  = 0b00010000,
-    SIXS   = 0b00100000,
+//time loader state machine init
+uint64_t next_update;
+#define time_upd 1000
 
-    NINE   = 0b00000000,
-    FOUR   = 0b00000001,
-    TWO    = 0b00000010,
-    SEVEN  = 0b00000011,
-    ONE    = 0b00000100,
-    THREE  = 0b00001000,
-    EIGHT  = 0b00001001,
-    FIVE   = 0b00001011,
-    SIX    = 0b00001010,
-    ZERO   = 0b00001100
-};
-uint8_t digits_convert[] = {0b00001100, 0b00000100, 0b00000010, 0b00001000, 0b00000001, 
-                            0b00001011, 0b00001010, 0b00000011, 0b00001001, 0b00000000};
+void update_time(){
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+        if (next_update > time) return;
+        upd_time();
+        next_update = time + time_upd;
+    } 
+}
+
 int main(void){
     DDRD =  0b11111111;
     DDRC =  0b11111111;
     TWIInit();
-    set_time();
+    // set_time();
 
+    //Timer init
+    cli();
+    TCCR0A |= 1<<WGM01;
+    TCCR0B |= 1<<CS01; 
+    TCNT0 = 0;
+    OCR0A = 125; // 1/5 of a milisecond
+    TIMSK0 |= 1 << OCIE0A; //allow interrupt
+    sei();
+    digite_state_m_init();
     while(1){
-        PORTD = FIRST;
-        PORTC = digits_convert[digits[0]];
-        _delay_ms(delay);
-        PORTD <<= 1;
-        PORTC = digits_convert[digits[1]];
-        _delay_ms(delay);
-        PORTD <<= 1;
-        PORTC = digits_convert[digits[2]];
-        _delay_ms(delay);
-        PORTD <<= 1;
-        PORTC = digits_convert[digits[3]];
-        _delay_ms(delay);
-        PORTD <<= 1;
-        PORTC = digits_convert[digits[4]];
-        _delay_ms(delay);
-        PORTD <<= 1;
-        PORTC = digits_convert[digits[5]];
-        _delay_ms(delay);
-        upd_time();
+        change_digit();
+        update_time();
     }
     return 0;
 }
