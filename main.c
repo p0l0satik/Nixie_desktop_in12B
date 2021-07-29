@@ -96,15 +96,13 @@ void change_digit(){
     }
     PORTC = temp_c;
     PORTD = temp_d;
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
+        next_change = time + shine_time;
+    }
     curr_digit = (curr_digit + 1) % 6;
     digit_light = (digit_light + 1) % 6;
     temp_c = digits_convert[digits[curr_digit]];
     temp_d = 1 << digit_light;
-    
-
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
-        next_change = time + shine_time;
-    } 
 }
 
 void upd_time(){
