@@ -77,25 +77,28 @@ uint8_t digits_convert[] = {0b00001100, 0b00000100, 0b00000010, 0b00001000, 0b00
                             0b00001011, 0b00001010, 0b00000011, 0b00001001, 0b00000000};
 uint8_t curr_digit;
 uint64_t next_change;
+uint8_t digit_light;
 #define shine_time 3
 void digite_state_m_init(){
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
         next_change = time + shine_time;
     }
-    PORTD = FIRST;
+    digit_light = 0;
     curr_digit = 0;
 }
+
 
 void change_digit(){
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
         if (next_change > time) return;
     }
     curr_digit = (curr_digit + 1) % 6;
-    PORTC = digits_convert[digits[curr_digit]];
-    if (PORTD == SIXS) 
-        PORTD = FIRST;
-    else
-        PORTD <<= 1;
+    digit_light = (digit_light + 1) % 6;
+    uint8_t temp_c = digits_convert[digits[curr_digit]];
+    uint8_t temp_d = 1 << digit_light;
+    PORTC = temp_c;
+    PORTD = temp_d;
+
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
         next_change = time + shine_time;
     } 
@@ -229,7 +232,7 @@ int main(void){
     // PORTC = digits_convert[0];
     // PORTD = 0b00000011;
     TWIInit();
-    set_time();
+    // set_time();
 
     //Timer init
     cli();
