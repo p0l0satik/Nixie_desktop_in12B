@@ -93,12 +93,10 @@ void digite_state_m_init(){
 void change_digit(){
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
         if (next_change > time) return;
+        next_change = time + shine_time;
     }
     PORTC = temp_c;
     PORTD = temp_d;
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE){
-        next_change = time + shine_time;
-    }
     curr_digit = (curr_digit + 1) % 6;
     digit_light = (digit_light + 1) % 6;
     temp_c = digits_convert[digits[curr_digit]];
